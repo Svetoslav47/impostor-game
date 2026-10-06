@@ -23,7 +23,7 @@ const rooms = new Map();
  *   settings: { impostorCount: 1 | 2, categoryIds: string[] },
  *   phase: 'lobby' | 'countdown' | 'playing', countdownEndsAt: number, countdownTimer: NodeJS.Timeout | null,
  *   round: number, starterId: string | null, cards: Map<string, Card>,
- *   current: { word: string, hint: string, category: {id: string, name: string}, impostorIds: string[] } | null,
+ *   current: { word: string, hint: string, category: {id: string, name: string}, impostorIds: string[], impostorNames: string[], starterName: string } | null,
  *   revealed: boolean, usedWords: Set<string>, emptySince: number | null,
  * }} Room
  */
@@ -74,9 +74,15 @@ function publicRoom(room) {
     countdownMs: room.phase === 'countdown' ? Math.max(0, room.countdownEndsAt - Date.now()) : 0,
     round: room.round,
     starterId: room.phase === 'playing' ? room.starterId : null,
+    starterName: room.phase === 'playing' ? room.current?.starterName ?? null : null,
     revealed:
       room.revealed && room.current
-        ? { word: room.current.word, category: room.current.category, impostorIds: room.current.impostorIds }
+        ? {
+            word: room.current.word,
+            category: room.current.category,
+            impostorIds: room.current.impostorIds,
+            impostorNames: room.current.impostorNames,
+          }
         : null,
   };
 }
@@ -116,8 +122,13 @@ function deal(room) {
         : { role: 'crew', word: pick.word.word, category: pick.category },
     ]),
   );
-  room.current = { word: pick.word.word, hint: pick.word.hint, category: pick.category, impostorIds };
   room.starterId = players[randomInt(players.length)].id;
+  // Names are snapshotted so the banner and reveal still read right if someone leaves mid-round.
+  const nameOf = (id) => players.find((p) => p.id === id).name;
+  room.current = {
+    word: pick.word.word, hint: pick.word.hint, category: pick.category, impostorIds,
+    impostorNames: impostorIds.map(nameOf), starterName: nameOf(room.starterId),
+  };
   room.revealed = false;
 }
 

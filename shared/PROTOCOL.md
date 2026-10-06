@@ -43,8 +43,8 @@ Connect to the same origin with `ws(s)://` and path `/ws`. All messages are JSON
     phase: "lobby" | "countdown" | "playing",
     countdownMs,          // ms left when phase is "countdown"
     round,                // increments every game
-    starterId,            // set in "playing"
-    revealed: null | {word, category, impostorIds}
+    starterId, starterName,                    // set in "playing"
+    revealed: null | {word, category, impostorIds, impostorNames}
   }
   ```
 - `{type:"card", round, card}` — private, only to each player, when `playing` starts
