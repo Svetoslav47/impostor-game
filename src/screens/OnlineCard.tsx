@@ -74,7 +74,7 @@ export function OnlineCard({
           </div>
         ) : card ? (
           <HoldCard tall tone={card.role === 'impostor' ? 'danger' : 'accent'} subtitle="Пусни, и картата се скрива.">
-            {card.role === 'impostor' ? <CardFace role="impostor" hint={card.hint} category={card.category} /> : <CardFace role="crew" word={card.word} category={card.category} />}
+            {card.role === 'impostor' ? <CardFace role="impostor" hint={card.hint} /> : <CardFace role="crew" word={card.word} />}
           </HoldCard>
         ) : (
           <div className="staticCard">

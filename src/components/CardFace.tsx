@@ -11,15 +11,13 @@ export function CategoryChip({ id, name }: { id: string; name: string }) {
   )
 }
 
-export type FaceProps =
-  | { role: 'crew'; word: string; category: { id: string; name: string } }
-  | { role: 'impostor'; hint: string; category: { id: string; name: string } }
+// No category on the card: knowing the topic made the impostor's job too easy.
+export type FaceProps = { role: 'crew'; word: string } | { role: 'impostor'; hint: string }
 
 /** What a player sees while holding the card. */
 export function CardFace(props: FaceProps) {
   return (
     <>
-      <CategoryChip id={props.category.id} name={props.category.name} />
       {props.role === 'crew' ? (
         <>
           <span className="face__kicker">Тайната дума</span>

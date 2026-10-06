@@ -17,7 +17,7 @@ const rooms = new Map();
 
 /**
  * @typedef {{ id: string, name: string, socket: import('ws').WebSocket | null, disconnectedAt: number | null }} Player
- * @typedef {{ role: 'crew', word: string, category: {id: string, name: string} } | { role: 'impostor', hint: string, category: {id: string, name: string} }} Card
+ * @typedef {{ role: 'crew', word: string } | { role: 'impostor', hint: string }} Card
  * @typedef {{
  *   code: string, hostId: string, players: Player[],
  *   settings: { impostorCount: 1 | 2, categoryIds: string[] },
@@ -118,8 +118,8 @@ function deal(room) {
     players.map((p) => [
       p.id,
       impostorIds.includes(p.id)
-        ? { role: 'impostor', hint: pick.word.hint, category: pick.category }
-        : { role: 'crew', word: pick.word.word, category: pick.category },
+        ? { role: 'impostor', hint: pick.word.hint }
+        : { role: 'crew', word: pick.word.word },
     ]),
   );
   room.starterId = players[randomInt(players.length)].id;

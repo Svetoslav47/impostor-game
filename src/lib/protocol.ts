@@ -31,9 +31,7 @@ export interface Room {
   }
 }
 
-export type Card =
-  | { role: 'crew'; word: string; category: { id: string; name: string } }
-  | { role: 'impostor'; hint: string; category: { id: string; name: string } }
+export type Card = { role: 'crew'; word: string } | { role: 'impostor'; hint: string }
 
 export type ClientMessage =
   | { type: 'create'; name: string; settings: RoomSettings }

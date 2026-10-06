@@ -51,8 +51,7 @@ Connect to the same origin with `ws(s)://` and path `/ws`. All messages are JSON
 - `{type:"card", round, card}` — private, only to each player, when `playing` starts
   (and again on `resume`). Players who joined mid-round get no card that round.
   ```
-  card = {role:"crew", word, category: {id, name}}
-       | {role:"impostor", hint, category: {id, name}}
+  card = {role:"crew", word} | {role:"impostor", hint}   // no category: it gave the impostor too much
   ```
 - `{type:"error", message}` — message is Bulgarian, ready to show.
 - `{type:"left"}` — confirms `leave`; the client goes back to the start screen.

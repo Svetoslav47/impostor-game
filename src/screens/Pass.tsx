@@ -21,7 +21,6 @@ export function Pass({
   const name = round.players[index]
   const total = round.players.length
   const isImpostor = round.impostors.includes(index)
-  const category = { id: round.category.id, name: round.category.name }
   return (
     <main className="screen" key={index}>
       <NavBar
@@ -42,7 +41,7 @@ export function Pass({
         <span className="passBody__kicker">Подай устройството на</span>
         <h1 className="passBody__name">{name}</h1>
         <HoldCard tone={isImpostor ? 'danger' : 'accent'} subtitle={`Картата се скрива, щом пуснеш. Само за ${name}.`} onReveal={onSeen}>
-          {isImpostor ? <CardFace role="impostor" hint={round.hint} category={category} /> : <CardFace role="crew" word={round.word} category={category} />}
+          {isImpostor ? <CardFace role="impostor" hint={round.hint} /> : <CardFace role="crew" word={round.word} />}
         </HoldCard>
       </div>
 
