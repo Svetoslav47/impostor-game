@@ -41,6 +41,7 @@ export type ClientMessage =
   | { type: 'start' }
   | { type: 'reveal' }
   | { type: 'lobby' }
+  | { type: 'ping' }
   | { type: 'leave' }
 
 export type ServerMessage =
@@ -49,3 +50,4 @@ export type ServerMessage =
   | { type: 'card'; round: number; card: Card }
   | { type: 'error'; message: string }
   | { type: 'left' }
+  | { type: 'pong' }

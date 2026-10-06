@@ -9,8 +9,12 @@ const PORT = Number(process.env.PORT) || 8787;
 const COUNTDOWN_MS = 5000;
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 12;
-const DISCONNECT_GRACE_MS = 30_000;
-const EMPTY_ROOM_TTL_MS = 10 * 60_000;
+// Phones drop their socket whenever the screen locks, so "disconnected" is normal
+// mid-game. Players are only removed when they leave or stay away for a long time.
+const HOST_HANDOVER_MS = 60_000;
+const AWAY_MS = 3 * 60_000; // still dealt into the next round if back within this
+const PLAYER_TTL_MS = 30 * 60_000;
+const EMPTY_ROOM_TTL_MS = 2 * 60 * 60_000;
 
 /** @type {Map<string, Room>} */
 const rooms = new Map();
@@ -59,6 +63,8 @@ function cleanName(room, raw) {
 }
 
 const connected = (room) => room.players.filter((p) => p.socket);
+/** Connected, or locked their phone only recently: these get cards. */
+const active = (room) => room.players.filter((p) => p.socket || Date.now() - p.disconnectedAt < AWAY_MS);
 
 function send(socket, message) {
   if (socket && socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
@@ -109,7 +115,7 @@ function deal(room) {
   const pick = fresh[randomInt(fresh.length)];
   room.usedWords.add(pick.word.word);
 
-  const players = connected(room);
+  const players = active(room);
   const impostorCount = players.length >= 5 ? room.settings.impostorCount : 1;
   const shuffled = [...players].sort(() => Math.random() - 0.5);
   const impostorIds = shuffled.slice(0, impostorCount).map((p) => p.id);
@@ -143,7 +149,7 @@ function startCountdown(room) {
   broadcast(room);
   room.countdownTimer = setTimeout(() => {
     room.countdownTimer = null;
-    if (connected(room).length < MIN_PLAYERS) {
+    if (active(room).length < MIN_PLAYERS) {
       room.phase = 'lobby';
       broadcast(room);
       for (const p of connected(room)) send(p.socket, { type: 'error', message: 'Някой излезе — нужни са поне 3 играчи.' });
@@ -156,9 +162,10 @@ function startCountdown(room) {
   }, COUNTDOWN_MS);
 }
 
+/** Hand the room to someone else only if the host left or has been away a while. */
 function ensureHost(room) {
   const host = room.players.find((p) => p.id === room.hostId);
-  if (host?.socket) return;
+  if (host && (host.socket || Date.now() - host.disconnectedAt < HOST_HANDOVER_MS)) return;
   const next = connected(room)[0];
   if (next) room.hostId = next.id;
 }
@@ -197,6 +204,8 @@ function handle(socket, msg) {
   const me = room?.players.find((p) => p.id === session.playerId);
 
   switch (msg?.type) {
+    case 'ping':
+      return send(socket, { type: 'pong' });
     case 'create': {
       if (me) return fail('Вече си в стая.');
       const code = newCode();
@@ -249,10 +258,8 @@ function handle(socket, msg) {
     case 'start': {
       if (!isHost) return fail('Само домакинът пуска играта.');
       if (room.phase === 'countdown') return;
-      const count = connected(room).length;
+      const count = active(room).length;
       if (count < MIN_PLAYERS) return fail('Нужни са поне 3 играчи.');
-      // Players who left mid-game are dropped before the next round.
-      room.players = room.players.filter((p) => p.socket);
       return startCountdown(room);
     }
     case 'lobby':
@@ -262,7 +269,6 @@ function handle(socket, msg) {
       room.cards = new Map();
       room.current = null;
       room.revealed = false;
-      room.players = room.players.filter((p) => p.socket);
       return broadcast(room);
     case 'reveal':
       if (!isHost) return fail('Само домакинът разкрива думата.');
@@ -285,7 +291,7 @@ function onClose(socket) {
   broadcast(room);
 }
 
-// Sweep: host hand-over, lobby removals and empty-room cleanup.
+// Sweep: host hand-over, removing long-gone players and empty-room cleanup.
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
@@ -294,24 +300,11 @@ setInterval(() => {
       rooms.delete(room.code);
       continue;
     }
-    let changed = false;
-    const host = room.players.find((p) => p.id === room.hostId);
-    if (host && !host.socket && now - host.disconnectedAt > DISCONNECT_GRACE_MS) {
-      const next = connected(room)[0];
-      if (next) {
-        room.hostId = next.id;
-        changed = true;
-      }
-    }
-    if (room.phase === 'lobby') {
-      const stale = room.players.filter((p) => !p.socket && now - p.disconnectedAt > DISCONNECT_GRACE_MS);
-      if (stale.length && connected(room).length) {
-        room.players = room.players.filter((p) => !stale.includes(p));
-        ensureHost(room);
-        changed = true;
-      }
-    }
-    if (changed) broadcast(room);
+    const hostBefore = room.hostId;
+    const stale = room.players.filter((p) => !p.socket && now - p.disconnectedAt > PLAYER_TTL_MS);
+    if (stale.length && connected(room).length) room.players = room.players.filter((p) => !stale.includes(p));
+    ensureHost(room);
+    if (stale.length || room.hostId !== hostBefore) broadcast(room);
   }
 }, 5000).unref();
 

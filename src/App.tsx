@@ -76,7 +76,19 @@ export default function App() {
   }
 
   let screen
-  if (room && me) {
+  if (online.session && !room) {
+    // After a reload or a long sleep: we still belong to a room, just not reconnected yet.
+    screen = (
+      <main className="screen screen--fade rejoin">
+        <span className="spinner spinner--large" aria-hidden="true" />
+        <h1 className="rejoin__title">Връщане в стая {online.session.code}…</h1>
+        <p className="rejoin__text">Мястото ти в стаята се пази. Свързваме те отново.</p>
+        <button type="button" className="btn btn--plain" onClick={online.leave}>
+          Излез от стаята
+        </button>
+      </main>
+    )
+  } else if (room && me) {
     if (room.phase === 'lobby') {
       screen = <Lobby room={room} me={me} onLeave={leaveRoom} onSettings={online.updateSettings} onStart={online.start} />
     } else if (room.phase === 'countdown') {
@@ -169,6 +181,12 @@ export default function App() {
   return (
     <>
       {screen}
+      {room && online.status !== 'open' && (
+        <div className="reconnectPill" role="status">
+          <span className="spinner" aria-hidden="true" />
+          Няма връзка — свързваме те отново…
+        </div>
+      )}
       {toast && <Toast message={toast} onDismiss={dismissToast} />}
       {confirm && <ConfirmDialog options={confirm} onClose={closeConfirm} />}
     </>

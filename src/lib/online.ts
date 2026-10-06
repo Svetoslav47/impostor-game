@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Card, ClientMessage, Room, RoomSettings, ServerMessage } from './protocol'
-import { socketUrl } from './server'
+import { serverUrl, socketUrl } from './server'
 import { readJSON, writeJSON } from './storage'
 
 export type SocketStatus = 'idle' | 'connecting' | 'open' | 'closed'
@@ -12,9 +12,16 @@ export interface Session {
 
 const SESSION_KEY = 'impostor.session'
 const COUNTDOWN_TOTAL_MS = 5000
+// A phone that slept keeps a socket that looks open but is dead. Ping often and
+// treat silence as a dead connection.
+const PING_EVERY_MS = 10_000
+const DEAD_AFTER_MS = 25_000
+// Render's free plan restarts the server (losing every room) after 15 idle minutes
+// of HTTP traffic, and socket messages don't count, so poke /health while in a room.
+const KEEP_AWAKE_EVERY_MS = 4 * 60_000
 
 export function loadSession(): Session | null {
-  const s = readJSON<Session>('session', SESSION_KEY)
+  const s = readJSON<Session>('local', SESSION_KEY)
   return s && typeof s.code === 'string' && typeof s.playerId === 'string' ? s : null
 }
 
@@ -58,7 +65,7 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
 
   const setSession = useCallback((s: Session | null) => {
     sessionRef.current = s
-    writeJSON('session', SESSION_KEY, s)
+    writeJSON('local', SESSION_KEY, s)
     setSessionState(s)
   }, [])
 
@@ -110,7 +117,13 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
           break
         case 'left':
           window.clearTimeout(leavingRef.current)
+          if (resumingRef.current) {
+            resumingRef.current = false
+            onErrorRef.current('Стаята вече не съществува. Създай нова или влез с нов код.')
+          }
           clearRoom()
+          break
+        case 'pong':
           break
       }
     },
@@ -122,6 +135,8 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
     let disposed = false
     let attempt = 0
     let retryTimer = 0
+    let lastHeard = Date.now()
+    let hiddenAt = 0
 
     const connect = () => {
       if (disposed) return
@@ -134,8 +149,10 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
         return
       }
       wsRef.current = ws
+      lastHeard = Date.now()
       ws.onopen = () => {
         attempt = 0
+        lastHeard = Date.now()
         setStatus('open')
         const s = sessionRef.current
         // A create/join that was queued supersedes resuming an older session.
@@ -149,6 +166,7 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
         for (const m of queued) ws.send(JSON.stringify(m))
       }
       ws.onmessage = (ev) => {
+        lastHeard = Date.now()
         let msg: ServerMessage
         try {
           msg = JSON.parse(String(ev.data)) as ServerMessage
@@ -176,23 +194,53 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
       retryTimer = window.setTimeout(connect, delay)
     }
 
-    // Reconnect right away when the page comes back to the foreground.
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && !wsRef.current && !disposed) {
-        window.clearTimeout(retryTimer)
-        attempt = 0
-        connect()
+    /** Drop the current socket without waiting for its close handshake and dial again. */
+    const reconnectNow = () => {
+      if (disposed) return
+      window.clearTimeout(retryTimer)
+      const old = wsRef.current
+      wsRef.current = null
+      if (old) {
+        old.onclose = null
+        old.onmessage = null
+        old.close()
       }
+      attempt = 0
+      connect()
     }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('online', onVisible)
+
+    const heartbeat = window.setInterval(() => {
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+      if (Date.now() - lastHeard > DEAD_AFTER_MS) reconnectNow()
+      else ws.send(JSON.stringify({ type: 'ping' } satisfies ClientMessage))
+    }, PING_EVERY_MS)
+
+    // Back from a locked screen or another app: the old socket is probably dead.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        return
+      }
+      const ws = wsRef.current
+      const broken = !ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED
+      const sleptLong = hiddenAt > 0 && Date.now() - hiddenAt > 3000
+      hiddenAt = 0
+      if (broken || sleptLong) reconnectNow()
+    }
+    const onOnline = () => reconnectNow()
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('pageshow', onVisibility)
 
     connect()
     return () => {
       disposed = true
       window.clearTimeout(retryTimer)
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('online', onVisible)
+      window.clearInterval(heartbeat)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('pageshow', onVisibility)
       const ws = wsRef.current
       wsRef.current = null
       if (ws) {
@@ -202,6 +250,13 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
       setStatus('idle')
     }
   }, [keepOpen, handle])
+
+  useEffect(() => {
+    if (!session) return
+    const poke = () => void fetch(`${serverUrl()}/health`, { cache: 'no-store' }).catch(() => {})
+    const timer = window.setInterval(poke, KEEP_AWAKE_EVERY_MS)
+    return () => window.clearInterval(timer)
+  }, [session])
 
   const create = useCallback(
     (name: string, settings: RoomSettings) => send({ type: 'create', name, settings }),
