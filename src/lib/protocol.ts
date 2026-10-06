@@ -42,6 +42,7 @@ export type ClientMessage =
   | { type: 'settings'; settings: RoomSettings }
   | { type: 'start' }
   | { type: 'reveal' }
+  | { type: 'lobby' }
   | { type: 'leave' }
 
 export type ServerMessage =

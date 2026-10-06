@@ -11,6 +11,7 @@ export function OnlineCard({
   card,
   onLeave,
   onNewGame,
+  onChangeSettings,
   onReveal,
 }: {
   room: Room
@@ -18,6 +19,7 @@ export function OnlineCard({
   card: Card | null
   onLeave: () => void
   onNewGame: () => void
+  onChangeSettings: () => void
   onReveal: () => void
 }) {
   const isHost = room.hostId === me
@@ -90,6 +92,9 @@ export function OnlineCard({
             </button>
             <button type="button" className="btn btn--plain btn--danger" disabled={!!revealed} onClick={onReveal}>
               Разкрий думата за всички
+            </button>
+            <button type="button" className="btn btn--plain" onClick={onChangeSettings}>
+              Промени настройките
             </button>
           </>
         ) : (

@@ -255,6 +255,15 @@ function handle(socket, msg) {
       room.players = room.players.filter((p) => p.socket);
       return startCountdown(room);
     }
+    case 'lobby':
+      if (!isHost) return fail('Само домакинът променя настройките.');
+      if (room.phase !== 'playing') return;
+      room.phase = 'lobby';
+      room.cards = new Map();
+      room.current = null;
+      room.revealed = false;
+      room.players = room.players.filter((p) => p.socket);
+      return broadcast(room);
     case 'reveal':
       if (!isHost) return fail('Само домакинът разкрива думата.');
       if (room.phase !== 'playing') return;

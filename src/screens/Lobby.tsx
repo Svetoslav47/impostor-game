@@ -1,7 +1,5 @@
-import { useState } from 'react'
 import { CategoryList, toggleId } from '../components/CategoryList'
 import { AVATAR_COLORS, Avatar, NavBar, NavButton, Segmented } from '../components/Controls'
-import { Chevron } from '../components/Icons'
 import { ALL_CATEGORY_IDS } from '../lib/categories'
 import type { Room, RoomSettings } from '../lib/protocol'
 import { TWO_IMPOSTORS_MIN } from '../lib/settings'
@@ -24,16 +22,18 @@ export function Lobby({
   onSettings: (s: RoomSettings) => void
   onStart: () => void
 }) {
-  const [picking, setPicking] = useState(false)
   const isHost = room.hostId === me
   const connectedCount = room.players.filter((p) => p.connected).length
   const { impostorCount, categoryIds } = room.settings
   const allOn = categoryIds.length === ALL_CATEGORY_IDS.length
   const tooFewPlayers = connectedCount < 3
-  const tooFewForTwo = impostorCount === 2 && connectedCount < TWO_IMPOSTORS_MIN
+  // With fewer than 5 players the server deals a single impostor even if 2 is picked.
+  const twoFallsBackToOne = impostorCount === 2 && connectedCount < TWO_IMPOSTORS_MIN
 
-  if (picking && isHost) {
-    return <CategoryPicker initial={categoryIds} onCancel={() => setPicking(false)} onDone={(ids) => { onSettings({ impostorCount, categoryIds: ids }); setPicking(false) }} />
+  // The host edits categories in place; the last one can't be unticked.
+  const toggleCategory = (id: string) => {
+    const next = toggleId(categoryIds, id)
+    if (next.length) onSettings({ impostorCount, categoryIds: next })
   }
 
   const categoriesValue = allOn ? `Всички ${ALL_CATEGORY_IDS.length}` : `${categoryIds.length} от ${ALL_CATEGORY_IDS.length}`
@@ -82,7 +82,6 @@ export function Lobby({
                 label="Брой импостори"
                 value={impostorCount}
                 onChange={(v) => onSettings({ impostorCount: v, categoryIds })}
-                isDisabled={(v) => v === 2 && connectedCount < TWO_IMPOSTORS_MIN && impostorCount !== 2}
                 options={[
                   { value: 1 as const, label: '1' },
                   { value: 2 as const, label: '2' },
@@ -92,37 +91,44 @@ export function Lobby({
               <span className="row__value">{impostorCount}</span>
             )}
           </div>
-          {isHost ? (
-            <button type="button" className="row row--link" onClick={() => setPicking(true)}>
-              <span className="row__label">Категории</span>
-              <span className="row__value">
-                {categoriesValue}
-                <Chevron />
-              </span>
-            </button>
-          ) : (
+          {!isHost && (
             <div className="row">
               <span className="row__label">Категории</span>
               <span className="row__value">{categoriesValue}</span>
             </div>
           )}
         </div>
-        {isHost && <p className="sectionFooter">Двама импостори са възможни при 5 или повече играчи.</p>}
+        <p className="sectionFooter">
+          {twoFallsBackToOne
+            ? `Двама импостори — щом станат поне ${TWO_IMPOSTORS_MIN} играчи. Дотогава играта е с един.`
+            : `Двама импостори са възможни при ${TWO_IMPOSTORS_MIN} или повече играчи.`}
+        </p>
       </section>
+
+      {isHost && (
+        <section className="section">
+          <div className="sectionHeader sectionHeader--split">
+            <h2 className="sectionHeader__title">Категории · {categoriesValue}</h2>
+            {!allOn && (
+              <button type="button" className="textBtn" onClick={() => onSettings({ impostorCount, categoryIds: [...ALL_CATEGORY_IDS] })}>
+                Избери всички
+              </button>
+            )}
+          </div>
+          <CategoryList selected={categoryIds} onToggle={toggleCategory} />
+          <p className="sectionFooter">Думата се тегли от избраните категории. Поне една трябва да остане.</p>
+        </section>
+      )}
 
       <div className="flexSpacer" />
       <div className="footer footer--lobby">
         {isHost ? (
           <>
-            <button type="button" className="btn btn--primary" disabled={tooFewPlayers || tooFewForTwo} onClick={onStart}>
+            <button type="button" className="btn btn--primary" disabled={tooFewPlayers} onClick={onStart}>
               Започни играта
             </button>
             <span className="footer__caption" aria-live="polite">
-              {tooFewPlayers
-                ? 'Нужни са поне 3 играчи'
-                : tooFewForTwo
-                  ? 'За двама импостори са нужни поне 5 играчи'
-                  : 'Само домакинът вижда този бутон'}
+              {tooFewPlayers ? 'Нужни са поне 3 играчи' : 'Само домакинът вижда този бутон'}
             </span>
           </>
         ) : (
@@ -132,35 +138,6 @@ export function Lobby({
           </span>
         )}
       </div>
-    </main>
-  )
-}
-
-function CategoryPicker({ initial, onCancel, onDone }: { initial: string[]; onCancel: () => void; onDone: (ids: string[]) => void }) {
-  const [ids, setIds] = useState(initial)
-  const allOn = ids.length === ALL_CATEGORY_IDS.length
-  return (
-    <main className="screen screen--fade">
-      <NavBar
-        left={<NavButton onClick={onCancel}>Отказ</NavButton>}
-        title="Категории"
-        right={
-          <NavButton bold disabled={ids.length === 0} onClick={() => onDone(ids)}>
-            Готово
-          </NavButton>
-        }
-      />
-      <section className="section">
-        <div className="sectionHeader sectionHeader--split">
-          <h2 className="sectionHeader__title">Категории</h2>
-          <button type="button" className="textBtn" onClick={() => setIds(allOn ? [] : [...ALL_CATEGORY_IDS])}>
-            {allOn ? 'Изчисти' : 'Избери всички'}
-          </button>
-        </div>
-        <CategoryList selected={ids} onToggle={(id) => setIds(toggleId(ids, id))} />
-        <p className="sectionFooter">{ids.length === 0 ? 'Избери поне една категория.' : 'Думата се тегли от избраните категории.'}</p>
-      </section>
-      <div className="footer" />
     </main>
   )
 }

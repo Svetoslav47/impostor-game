@@ -32,6 +32,7 @@ export interface Online {
   updateSettings(settings: RoomSettings): void
   start(): void
   reveal(): void
+  backToLobby(): void
   leave(): void
 }
 
@@ -210,6 +211,7 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
   const updateSettings = useCallback((settings: RoomSettings) => send({ type: 'settings', settings }), [send])
   const start = useCallback(() => send({ type: 'start' }), [send])
   const reveal = useCallback(() => send({ type: 'reveal' }), [send])
+  const backToLobby = useCallback(() => send({ type: 'lobby' }), [send])
   const leave = useCallback(() => {
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -236,6 +238,7 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
     updateSettings,
     start,
     reveal,
+    backToLobby,
     leave,
   }
 }

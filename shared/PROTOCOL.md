@@ -29,6 +29,7 @@ Connect to the same origin with `ws(s)://` and path `/ws`. All messages are JSON
 | `settings` | `settings` | host, lobby only |
 | `start` | — | host; from `lobby` or `playing` (= new game, same settings) |
 | `reveal` | — | host, while `playing` |
+| `lobby` | — | host, while `playing`: everyone goes back to the lobby so settings can change |
 | `leave` | — | anyone |
 
 ### Server → client

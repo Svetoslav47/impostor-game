@@ -89,6 +89,7 @@ export default function App() {
           card={online.card}
           onLeave={leaveRoom}
           onNewGame={online.start}
+          onChangeSettings={online.backToLobby}
           onReveal={() =>
             setConfirm({
               title: 'Разкрий думата за всички?',
