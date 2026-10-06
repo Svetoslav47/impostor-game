@@ -1,0 +1,19 @@
+# Render Blueprint for the optional multiplayer server.
+# The service name sets the URL: https://impostor-bg-server.onrender.com
+services:
+  - type: web
+    name: impostor-bg-server
+    runtime: node
+    plan: free
+    # No rootDir: the server reads ../shared/categories.json.
+    buildCommand: npm ci --prefix server
+    startCommand: node server/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - server/**
+        - shared/**
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
