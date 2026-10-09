@@ -38,7 +38,7 @@ export type ClientMessage =
   | { type: 'join'; code: string; name: string }
   | { type: 'resume'; code: string; playerId: string }
   | { type: 'settings'; settings: RoomSettings }
-  | { type: 'start' }
+  | { type: 'start'; seen?: Record<string, number> }
   | { type: 'reveal' }
   | { type: 'lobby' }
   | { type: 'ping' }

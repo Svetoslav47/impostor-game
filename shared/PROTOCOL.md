@@ -27,7 +27,7 @@ Connect to the same origin with `ws(s)://` and path `/ws`. All messages are JSON
 | `join` | `code` (4 digits), `name` | anyone |
 | `resume` | `code`, `playerId` | reconnecting player (ids kept in `sessionStorage`) |
 | `settings` | `settings` | host, lobby only |
-| `start` | — | host; from `lobby` or `playing` (= new game, same settings) |
+| `start` | `seen?` (word → times the host has had it) | host; from `lobby` or `playing` (= new game, same settings) |
 | `reveal` | — | host, while `playing` |
 | `lobby` | — | host, while `playing`: everyone goes back to the lobby so settings can change |
 | `leave` | — | anyone |

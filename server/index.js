@@ -28,7 +28,7 @@ const rooms = new Map();
  *   phase: 'lobby' | 'countdown' | 'playing', countdownEndsAt: number, countdownTimer: NodeJS.Timeout | null,
  *   round: number, starterId: string | null, cards: Map<string, Card>,
  *   current: { word: string, hint: string, category: {id: string, name: string}, impostorIds: string[], impostorNames: string[], starterName: string } | null,
- *   revealed: boolean, usedWords: Set<string>, emptySince: number | null,
+ *   revealed: boolean, usedWords: Set<string>, hostSeen: Record<string, number>, emptySince: number | null,
  * }} Room
  */
 
@@ -48,6 +48,19 @@ function cleanSettings(input, fallback) {
     impostorCount: input?.impostorCount === 2 ? 2 : 1,
     categoryIds: ids.length ? [...new Set(ids)] : fallback.categoryIds,
   };
+}
+
+const KNOWN_WORDS = new Set(CATEGORIES.flatMap((c) => c.words.map((w) => w.word)));
+
+/** Keeps only known words with sane counts from the host's seen history. */
+function cleanSeen(input) {
+  const seen = {};
+  if (input && typeof input === 'object') {
+    for (const [word, n] of Object.entries(input)) {
+      if (KNOWN_WORDS.has(word) && Number.isFinite(n) && n > 0) seen[word] = Math.min(n, 1000);
+    }
+  }
+  return seen;
 }
 
 const DEFAULT_SETTINGS = { impostorCount: 1, categoryIds: CATEGORIES.map((c) => c.id) };
@@ -112,7 +125,10 @@ function deal(room) {
     pool.forEach((p) => room.usedWords.delete(p.word.word));
     fresh = pool;
   }
-  const pick = fresh[randomInt(fresh.length)];
+  // Words the host has seen less often are more likely: weight 1 / (1 + times seen)².
+  const weights = fresh.map((p) => 1 / (1 + (room.hostSeen[p.word.word] ?? 0)) ** 2);
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  const pick = fresh.find((_, i) => (r -= weights[i]) < 0) ?? fresh[fresh.length - 1];
   room.usedWords.add(pick.word.word);
 
   const players = active(room);
@@ -214,7 +230,7 @@ function handle(socket, msg) {
       const created = {
         code, hostId: player.id, players: [], settings: cleanSettings(msg.settings, DEFAULT_SETTINGS),
         phase: 'lobby', countdownEndsAt: 0, countdownTimer: null, round: 0, starterId: null,
-        cards: new Map(), current: null, revealed: false, usedWords: new Set(), emptySince: null,
+        cards: new Map(), current: null, revealed: false, usedWords: new Set(), hostSeen: {}, emptySince: null,
       };
       player.name = cleanName(created, msg.name);
       created.players.push(player);
@@ -260,6 +276,7 @@ function handle(socket, msg) {
       if (room.phase === 'countdown') return;
       const count = active(room).length;
       if (count < MIN_PLAYERS) return fail('Нужни са поне 3 играчи.');
+      room.hostSeen = cleanSeen(msg.seen);
       return startCountdown(room);
     }
     case 'lobby':
@@ -317,7 +334,7 @@ const server = createServer((req, res) => {
   res.writeHead(404).end();
 });
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
 
 wss.on('connection', (socket) => {
   socket.isAlive = true;

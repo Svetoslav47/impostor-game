@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Card, ClientMessage, Room, RoomSettings, ServerMessage } from './protocol'
 import { serverUrl, socketUrl } from './server'
 import { readJSON, writeJSON } from './storage'
+import { loadSeen, markSeen } from './seen'
 
 export type SocketStatus = 'idle' | 'connecting' | 'open' | 'closed'
 
@@ -19,6 +20,15 @@ const DEAD_AFTER_MS = 25_000
 // Render's free plan restarts the server (losing every room) after 15 idle minutes
 // of HTTP traffic, and socket messages don't count, so poke /health while in a room.
 const KEEP_AWAKE_EVERY_MS = 4 * 60_000
+
+/** Rounds already counted in the seen history (key: "code:round"), so a word counts once per round. */
+const countedRounds = new Set<string>()
+function countSeen(code: string, round: number, word: string): void {
+  const key = `${code}:${round}`
+  if (countedRounds.has(key)) return
+  countedRounds.add(key)
+  markSeen(word)
+}
 
 export function loadSession(): Session | null {
   const s = readJSON<Session>('local', SESSION_KEY)
@@ -101,10 +111,12 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
               total: c.endsAt > Date.now() ? c.total : Math.max(COUNTDOWN_TOTAL_MS, left),
             }))
           }
+          if (r.revealed) countSeen(r.code, r.round, r.revealed.word)
           setRoom(r)
           break
         }
         case 'card':
+          if (msg.card.role === 'crew' && sessionRef.current) countSeen(sessionRef.current.code, msg.round, msg.card.word)
           setCardMsg({ round: msg.round, card: msg.card })
           break
         case 'error':
@@ -264,7 +276,8 @@ export function useOnline(wanted: boolean, onError: (message: string) => void): 
   )
   const join = useCallback((code: string, name: string) => send({ type: 'join', code, name }), [send])
   const updateSettings = useCallback((settings: RoomSettings) => send({ type: 'settings', settings }), [send])
-  const start = useCallback(() => send({ type: 'start' }), [send])
+  // The host's history steers the server toward words this device hasn't had yet.
+  const start = useCallback(() => send({ type: 'start', seen: loadSeen() }), [send])
   const reveal = useCallback(() => send({ type: 'reveal' }), [send])
   const backToLobby = useCallback(() => send({ type: 'lobby' }), [send])
   const leave = useCallback(() => {

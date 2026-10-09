@@ -15,19 +15,23 @@ export interface LocalSettings {
 }
 
 const KEY = 'impostor.settings.v1'
+/** Categories that existed before saved settings started tracking which ones the player has seen. */
+const LEGACY_CATEGORY_IDS = ['objects', 'people', 'mythical', 'professions', 'places', 'food', 'fiction', 'nature', 'feelings', 'sports']
 
 export function defaultName(i: number): string {
   return `Играч ${i + 1}`
 }
 
 export function loadSettings(): LocalSettings {
-  const s = readJSON<Partial<LocalSettings>>('local', KEY) ?? {}
+  const s = readJSON<Partial<LocalSettings> & { knownCategoryIds?: string[] }>('local', KEY) ?? {}
   const playerCount = clamp(Number(s.playerCount) || 5, MIN_PLAYERS, MAX_PLAYERS)
   const names = Array.from({ length: MAX_PLAYERS }, (_, i) =>
     typeof s.names?.[i] === 'string' ? s.names[i].slice(0, 20) : '',
   )
+  // Categories added since the settings were saved start switched on.
+  const known = Array.isArray(s.knownCategoryIds) ? s.knownCategoryIds : LEGACY_CATEGORY_IDS
   const categoryIds = Array.isArray(s.categoryIds)
-    ? ALL_CATEGORY_IDS.filter((id) => s.categoryIds!.includes(id))
+    ? ALL_CATEGORY_IDS.filter((id) => s.categoryIds!.includes(id) || !known.includes(id))
     : [...ALL_CATEGORY_IDS]
   let impostorCount: 1 | 2 = s.impostorCount === 2 ? 2 : 1
   if (playerCount < TWO_IMPOSTORS_MIN) impostorCount = 1
@@ -35,7 +39,7 @@ export function loadSettings(): LocalSettings {
 }
 
 export function saveSettings(s: LocalSettings): void {
-  writeJSON('local', KEY, s)
+  writeJSON('local', KEY, { ...s, knownCategoryIds: ALL_CATEGORY_IDS })
 }
 
 export function playerNames(s: LocalSettings): string[] {

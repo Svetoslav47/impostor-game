@@ -1,4 +1,5 @@
 import { CATEGORIES, type Category } from './categories'
+import { loadSeen, markSeen, seenWeight } from './seen'
 
 export interface LocalRound {
   players: string[]
@@ -34,8 +35,10 @@ export function dealRound(players: string[], impostorCount: number, categoryIds:
     fresh = candidates
   }
   candidates = fresh
-  const pick = candidates[randomInt(candidates.length)]
+  const seen = loadSeen()
+  const pick = weightedPick(candidates, ({ w }) => seenWeight(seen[w.word]))
   used.add(`${pick.c.id}:${pick.w.word}`)
+  markSeen(pick.w.word)
 
   const order = players.map((_, i) => i)
   shuffle(order)
@@ -49,6 +52,18 @@ export function dealRound(players: string[], impostorCount: number, categoryIds:
     hint: pick.w.hint,
     starter: randomInt(players.length),
   }
+}
+
+/** Random item, each chosen with probability proportional to its weight. */
+export function weightedPick<T>(items: T[], weight: (item: T) => number): T {
+  const weights = items.map(weight)
+  const total = weights.reduce((a, b) => a + b, 0)
+  let r = (randomInt(1_000_000) / 1_000_000) * total
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i]
+    if (r < 0) return items[i]
+  }
+  return items[items.length - 1]
 }
 
 export function shuffle<T>(a: T[]): T[] {
